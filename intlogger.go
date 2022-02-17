@@ -21,8 +21,6 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/fatih/color"
 )
 
 // TimeFormat is the time format to use for plain (non-JSON) output.
@@ -38,11 +36,18 @@ const errJsonUnsupportedTypeMsg = "logging contained values that don't serialize
 
 type colorize = func([]byte) []byte
 
-func colorizer(attr color.Attribute) colorize {
-	before := "\033[" + fmt.Sprint(int(attr)) + "m"
+func colorizer(color string) colorize {
+	before := "\033[" + color + "m"
 	const after = "\033[0m"
 	return func(b []byte) []byte {
 		return append(append(append(make([]byte, 0, 5+len(b)+4), before...), b...), after...)
+	}
+}
+
+func colorizerString(color string) func(string) string {
+	c := colorizer(color)
+	return func(s string) string {
+		return string(c(([]byte)(s)))
 	}
 }
 
@@ -56,18 +61,18 @@ var (
 	}
 
 	_levelToColor = map[Level]colorize{
-		Debug: colorizer(color.FgHiWhite),
-		Trace: colorizer(color.FgHiGreen),
-		Info:  colorizer(color.FgHiBlue),
-		Warn:  colorizer(color.FgHiYellow),
-		Error: colorizer(color.FgHiRed),
+		Debug: colorizer("97"), // HiWhite
+		Trace: colorizer("92"), // HiGreen
+		Info:  colorizer("94"), // HiBlue
+		Warn:  colorizer("93"), // HiYellow
+		Error: colorizer("91"), // HiRed
 	}
 
-	faintBoldColor                 = color.New(color.Faint, color.Bold)
-	faintColor                     = color.New(color.Faint)
-	faintMultiLinePrefix           = faintColor.Sprint("  | ")
-	faintFieldSeparator            = faintColor.Sprint("=")
-	faintFieldSeparatorWithNewLine = faintColor.Sprint("=\n")
+	faintBoldColor                 = colorizerString("1;2") // Faint+Bold
+	faintColor                     = colorizerString("2")   // Faint
+	faintMultiLinePrefix           = faintColor("  | ")
+	faintFieldSeparator            = faintColor("=")
+	faintFieldSeparatorWithNewLine = faintColor("=\n")
 )
 
 // Make sure that intLogger is a Logger
@@ -295,7 +300,7 @@ func (l *intLogger) logPlain(t time.Time, name string, level Level, msg string, 
 	if ok {
 		if l.headerColor != ColorOff {
 			color := _levelToColor[level]
-			color.Fprint(l.writer, s)
+			l.writer.Write(color([]byte(s)))
 		} else {
 			l.writer.WriteString(s)
 		}
@@ -415,7 +420,7 @@ func (l *intLogger) logPlain(t time.Time, name string, level Level, msg string, 
 			// Optionally apply the ANSI "faint" and "bold"
 			// SGR values to the key.
 			if l.fieldColor != ColorOff {
-				key = faintBoldColor.Sprint(key)
+				key = faintBoldColor(key)
 			}
 
 			// Values may contain multiple lines, and that format
